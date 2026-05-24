@@ -3,6 +3,7 @@ import L from 'leaflet'
 import { useGPS, GRID_SIZE } from '../hooks/useGPS'
 import { supabase } from '../lib/supabase'
 import { requestWakeLock } from '../main.jsx'
+import Leaderboard from './Leaderboard'
 
 const GRID_DEGREES = GRID_SIZE
 
@@ -43,6 +44,7 @@ export default function GameMap() {
   const [statusMsg, setStatusMsg] = useState('Waiting for GPS...')
   const [score, setScore] = useState(0)
   const [blockCount, setBlockCount] = useState(0)
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
 
   useEffect(() => {
     if (mapInstance.current) return
@@ -142,7 +144,6 @@ export default function GameMap() {
       .eq('controller_id', user.id)
 
     if (data) {
-      // Calculate live score: saved score + (minutes held * blocks owned)
       const minutesHeld = (Date.now() - new Date(data.last_score_updated_at).getTime()) / 60000
       const liveScore = Math.floor((data.total_score || 0) + (minutesHeld * (count || 0)))
       setScore(liveScore)
@@ -215,6 +216,12 @@ export default function GameMap() {
       pathPolyline.current.remove()
       pathPolyline.current = null
     }
+
+    // Update score in database
+    await supabase.rpc('update_player_score', {
+      player_id: user.id,
+      blocks_captured: captured
+    })
 
     resetPath()
     loadTerritories()
@@ -306,6 +313,16 @@ export default function GameMap() {
         Logout
       </button>
 
+      {/* Leaderboard button */}
+      <button onClick={() => setShowLeaderboard(true)} style={{
+        position: 'absolute', top: 112, right: 16,
+        background: 'rgba(0,0,0,0.75)', color: '#FFD700',
+        border: 'none', borderRadius: 8, padding: '10px 14px',
+        fontSize: 20, cursor: 'pointer', zIndex: 1000
+      }}>
+        🏆
+      </button>
+
       {/* Control buttons */}
       <div style={{
         position: 'absolute', bottom: 40, left: '50%',
@@ -333,6 +350,11 @@ export default function GameMap() {
           </>
         )}
       </div>
+
+      {/* Leaderboard overlay */}
+      {showLeaderboard && (
+        <Leaderboard onClose={() => setShowLeaderboard(false)} />
+      )}
     </div>
   )
 }
