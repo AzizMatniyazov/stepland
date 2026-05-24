@@ -1,30 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-
-const COLORS = [
-  '#FF5733', '#33FF57', '#3357FF', '#FF33F5',
-  '#FFD700', '#00FFFF', '#FF6B6B', '#6BCB77',
-  '#4D96FF', '#FF9F1C', '#E040FB', '#00BCD4'
-]
 
 export default function Onboarding({ userId, onComplete }) {
   const [username, setUsername] = useState('')
-  const [selectedColor, setSelectedColor] = useState('')
-  const [takenColors, setTakenColors] = useState([])
+  const [selectedColor, setSelectedColor] = useState('#00FF88')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Load already taken colors
-  useState(() => {
-    supabase.from('profiles').select('color').then(({ data }) => {
-      if (data) setTakenColors(data.map(p => p.color))
-    })
-  })
-
   async function handleSubmit() {
     if (!username.trim()) { setError('Please enter a username'); return }
-    if (!selectedColor) { setError('Please pick a color'); return }
     if (username.trim().length < 3) { setError('Username must be at least 3 characters'); return }
+    if (!selectedColor) { setError('Please pick a color'); return }
 
     setLoading(true)
     setError('')
@@ -41,6 +27,25 @@ export default function Onboarding({ userId, onComplete }) {
       setError('Username already taken. Try another.')
       setLoading(false)
       return
+    }
+
+    // Check color is not too similar to existing colors
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('color')
+      .neq('id', userId)
+
+    if (profiles) {
+      const tooSimilar = profiles.some(p => {
+        if (!p.color) return false
+        return colorDistance(selectedColor, p.color) < 30
+      })
+
+      if (tooSimilar) {
+        setError('This color is too similar to another player. Pick a different shade.')
+        setLoading(false)
+        return
+      }
     }
 
     const { error } = await supabase
@@ -88,51 +93,44 @@ export default function Onboarding({ userId, onComplete }) {
 
       {/* Color picker */}
       <div style={{ width: '100%', maxWidth: 340 }}>
-        <label style={{ color: '#aaa', fontSize: 13, display: 'block', marginBottom: 10 }}>
+        <label style={{ color: '#aaa', fontSize: 13, display: 'block', marginBottom: 6 }}>
           Choose your territory color
         </label>
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10
-        }}>
-          {COLORS.map(color => {
-            const isTaken = takenColors.includes(color)
-            const isSelected = selectedColor === color
-            return (
-              <div
-                key={color}
-                onClick={() => !isTaken && setSelectedColor(color)}
-                style={{
-                  width: 44, height: 44,
-                  borderRadius: 8,
-                  background: color,
-                  opacity: isTaken ? 0.25 : 1,
-                  cursor: isTaken ? 'not-allowed' : 'pointer',
-                  border: isSelected ? '3px solid #fff' : '3px solid transparent',
-                  boxSizing: 'border-box',
-                  position: 'relative'
-                }}
-              >
-                {isTaken && (
-                  <div style={{
-                    position: 'absolute', inset: 0,
-                    display: 'flex', alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 18, color: '#fff'
-                  }}>✕</div>
-                )}
-              </div>
-            )
-          })}
+
+        {/* Color wheel input */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <input
+            type="color"
+            value={selectedColor}
+            onChange={e => setSelectedColor(e.target.value)}
+            style={{
+              width: 60, height: 60,
+              borderRadius: 10, border: 'none',
+              cursor: 'pointer', background: 'none',
+              padding: 0
+            }}
+          />
+          <div>
+            <div style={{
+              width: 120, height: 40, borderRadius: 8,
+              background: selectedColor,
+              marginBottom: 4
+            }} />
+            <div style={{ color: '#888', fontSize: 12 }}>
+              {selectedColor}
+            </div>
+          </div>
         </div>
-        {selectedColor && (
-          <p style={{ color: '#aaa', fontSize: 12, marginTop: 8 }}>
-            Selected: <span style={{ color: selectedColor }}>■</span> {selectedColor}
-          </p>
-        )}
+
+        <p style={{ color: '#555', fontSize: 12, marginTop: 8 }}>
+          Pick any color. If it's too similar to another player's color you'll be asked to change it.
+        </p>
       </div>
 
       {error && (
-        <p style={{ color: '#FF4444', fontSize: 13, margin: 0 }}>{error}</p>
+        <p style={{ color: '#FF4444', fontSize: 13, margin: 0, textAlign: 'center', maxWidth: 340 }}>
+          {error}
+        </p>
       )}
 
       <button
@@ -143,11 +141,29 @@ export default function Onboarding({ userId, onComplete }) {
           border: 'none', padding: '14px 40px',
           borderRadius: 30, fontSize: 16,
           fontWeight: 'bold', cursor: 'pointer',
-          width: '100%', maxWidth: 340
+          width: '100%', maxWidth: 340,
+          opacity: loading ? 0.7 : 1
         }}
       >
         {loading ? 'Saving...' : 'Start Playing →'}
       </button>
     </div>
+  )
+}
+
+// Calculate perceptual distance between two hex colors
+// Returns 0-100, where lower = more similar
+function colorDistance(hex1, hex2) {
+  const r1 = parseInt(hex1.slice(1, 3), 16)
+  const g1 = parseInt(hex1.slice(3, 5), 16)
+  const b1 = parseInt(hex1.slice(5, 7), 16)
+  const r2 = parseInt(hex2.slice(1, 3), 16)
+  const g2 = parseInt(hex2.slice(3, 5), 16)
+  const b2 = parseInt(hex2.slice(5, 7), 16)
+
+  return Math.sqrt(
+    Math.pow(r1 - r2, 2) * 0.3 +
+    Math.pow(g1 - g2, 2) * 0.59 +
+    Math.pow(b1 - b2, 2) * 0.11
   )
 }
