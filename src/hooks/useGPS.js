@@ -46,7 +46,7 @@ export function useGPS() {
         const { latitude: lat, longitude: lng, speed, accuracy } = pos.coords
 
         // Ignore very inaccurate readings (desktop IP location)
-        if (accuracy > 200) {
+        if (accuracy > 50) {
           setError(`GPS accuracy too low (${Math.round(accuracy)}m). Use a phone or move outside.`)
           return
         }
