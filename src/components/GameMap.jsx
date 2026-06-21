@@ -4,6 +4,7 @@ import { useGPS, GRID_SIZE } from '../hooks/useGPS'
 import { supabase } from '../lib/supabase'
 import { requestWakeLock } from '../main.jsx'
 import Leaderboard from './Leaderboard'
+import Profile from './Profile'
 
 const GRID_DEGREES = GRID_SIZE
 
@@ -39,12 +40,22 @@ export default function GameMap() {
   const territoriesLayer = useRef(null)
   const gridLayer = useRef(null)
   const wakeLockRef = useRef(null)
+  const radarMarkersRef = useRef({})
 
   const { position, path, isRecording, error, startRecording, stopRecording, resetPath } = useGPS()
   const [statusMsg, setStatusMsg] = useState('Waiting for GPS...')
   const [score, setScore] = useState(0)
   const [blockCount, setBlockCount] = useState(0)
   const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [userId, setUserId] = useState(null)
+
+  // Get current user id once on mount
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUserId(user.id)
+    })
+  }, [])
 
   useEffect(() => {
     if (mapInstance.current) return
@@ -121,6 +132,75 @@ export default function GameMap() {
       }
     }
   }, [position, path, isRecording])
+
+  // Broadcast own location for radar
+  useEffect(() => {
+    if (!position || !userId) return
+
+    const broadcastLocation = async () => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, color')
+        .eq('id', userId)
+        .single()
+
+      await supabase
+        .from('player_locations')
+        .upsert({
+          user_id: userId,
+          lat: position.lat,
+          lng: position.lng,
+          username: profile?.username || 'Player',
+          color: profile?.color || '#FF5733',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' })
+    }
+
+    broadcastLocation()
+  }, [position, userId])
+
+  // Subscribe to other players' locations (real-time radar)
+  useEffect(() => {
+    if (!userId) return
+
+    const channel = supabase
+      .channel('player-locations')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'player_locations'
+      }, (payload) => {
+        if (!mapInstance.current) return
+
+        const p = payload.new || payload.old
+        if (!p || p.user_id === userId) return
+
+        if (radarMarkersRef.current[p.user_id]) {
+          radarMarkersRef.current[p.user_id].remove()
+          delete radarMarkersRef.current[p.user_id]
+        }
+
+        if (payload.eventType === 'DELETE') return
+
+        radarMarkersRef.current[p.user_id] = L.circleMarker(
+          [p.lat, p.lng], {
+            radius: 8,
+            fillColor: p.color || '#FF5733',
+            color: '#fff',
+            weight: 2,
+            fillOpacity: 0.9
+          }
+        ).bindTooltip(p.username, { permanent: false })
+         .addTo(mapInstance.current)
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+      Object.values(radarMarkersRef.current).forEach(m => m.remove())
+      radarMarkersRef.current = {}
+    }
+  }, [userId])
 
   function centerOnPlayer() {
     if (position && mapInstance.current) {
@@ -217,7 +297,6 @@ export default function GameMap() {
       pathPolyline.current = null
     }
 
-    // Update score in database
     await supabase.rpc('update_player_score', {
       player_id: user.id,
       blocks_captured: captured
@@ -243,19 +322,20 @@ export default function GameMap() {
   }
 
   async function handleLogout() {
+    if (userId) {
+      await supabase.from('player_locations').delete().eq('user_id', userId)
+    }
     await supabase.auth.signOut()
   }
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100vw' }}>
 
-      {/* Map */}
       <div ref={mapRef} style={{
         height: '100vh', width: '100vw',
         position: 'absolute', top: 0, left: 0
       }} />
 
-      {/* GPS error banner */}
       {error && (
         <div style={{
           position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
@@ -267,7 +347,6 @@ export default function GameMap() {
         </div>
       )}
 
-      {/* Status message */}
       <div style={{
         position: 'absolute', top: error ? 56 : 16, left: '50%',
         transform: 'translateX(-50%)',
@@ -278,7 +357,6 @@ export default function GameMap() {
         {statusMsg}
       </div>
 
-      {/* Score panel — top left */}
       <div style={{
         position: 'absolute', top: 16, left: 16,
         background: 'rgba(0,0,0,0.75)', color: '#fff',
@@ -293,7 +371,6 @@ export default function GameMap() {
         </div>
       </div>
 
-      {/* Center on player button */}
       <button onClick={centerOnPlayer} style={{
         position: 'absolute', top: 16, right: 16,
         background: 'rgba(0,0,0,0.75)', color: '#fff',
@@ -303,19 +380,19 @@ export default function GameMap() {
         🎯
       </button>
 
-      {/* Logout button */}
-      <button onClick={handleLogout} style={{
+      {/* Profile button */}
+      <button onClick={() => setShowProfile(true)} style={{
         position: 'absolute', top: 70, right: 16,
-        background: 'rgba(0,0,0,0.75)', color: '#aaa',
-        border: 'none', borderRadius: 8, padding: '8px 12px',
-        fontSize: 12, cursor: 'pointer', zIndex: 1000
+        background: 'rgba(0,0,0,0.75)', color: '#fff',
+        border: 'none', borderRadius: 8, padding: '10px 14px',
+        fontSize: 20, cursor: 'pointer', zIndex: 1000
       }}>
-        Logout
+        👤
       </button>
 
       {/* Leaderboard button */}
       <button onClick={() => setShowLeaderboard(true)} style={{
-        position: 'absolute', top: 112, right: 16,
+        position: 'absolute', top: 124, right: 16,
         background: 'rgba(0,0,0,0.75)', color: '#FFD700',
         border: 'none', borderRadius: 8, padding: '10px 14px',
         fontSize: 20, cursor: 'pointer', zIndex: 1000
@@ -323,7 +400,16 @@ export default function GameMap() {
         🏆
       </button>
 
-      {/* Control buttons */}
+      {/* Logout button */}
+      <button onClick={handleLogout} style={{
+        position: 'absolute', top: 178, right: 16,
+        background: 'rgba(0,0,0,0.75)', color: '#aaa',
+        border: 'none', borderRadius: 8, padding: '8px 12px',
+        fontSize: 12, cursor: 'pointer', zIndex: 1000
+      }}>
+        Logout
+      </button>
+
       <div style={{
         position: 'absolute', bottom: 40, left: '50%',
         transform: 'translateX(-50%)',
@@ -351,9 +437,12 @@ export default function GameMap() {
         )}
       </div>
 
-      {/* Leaderboard overlay */}
       {showLeaderboard && (
         <Leaderboard onClose={() => setShowLeaderboard(false)} />
+      )}
+
+      {showProfile && userId && (
+        <Profile userId={userId} onClose={() => setShowProfile(false)} />
       )}
     </div>
   )
