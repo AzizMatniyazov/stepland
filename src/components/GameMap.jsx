@@ -3,6 +3,8 @@ import L from 'leaflet'
 import { useGPS, GRID_SIZE } from '../hooks/useGPS'
 import { supabase } from '../lib/supabase'
 import { requestWakeLock } from '../main.jsx'
+import { useLanguage } from '../lib/LanguageContext'
+import { LANGUAGES } from '../lib/i18n'
 import Leaderboard from './Leaderboard'
 import Profile from './Profile'
 
@@ -43,14 +45,18 @@ export default function GameMap() {
   const radarMarkersRef = useRef({})
 
   const { position, path, isRecording, error, startRecording, stopRecording, resetPath } = useGPS()
-  const [statusMsg, setStatusMsg] = useState('Waiting for GPS...')
+  const { lang, setLang, t } = useLanguage()
+  const [statusMsg, setStatusMsg] = useState('')
   const [score, setScore] = useState(0)
   const [blockCount, setBlockCount] = useState(0)
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [userId, setUserId] = useState(null)
 
-  // Get current user id once on mount
+  useEffect(() => {
+    setStatusMsg(t.waitingGPS)
+  }, [t])
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setUserId(user.id)
@@ -86,7 +92,6 @@ export default function GameMap() {
     loadScore()
   }, [])
 
-  // Re-acquire wake lock if page becomes visible again
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible' && isRecording && !wakeLockRef.current) {
@@ -101,17 +106,13 @@ export default function GameMap() {
     if (!position || !mapInstance.current) return
 
     setStatusMsg(isRecording
-      ? `🔴 Recording — ${path.length} points`
-      : 'GPS locked ✅ — Tap START')
+      ? `🔴 ${t.recording} — ${path.length}`
+      : t.gpsLocked)
 
     if (!playerMarker.current) {
       playerMarker.current = L.circleMarker([position.lat, position.lng], {
-        radius: 10,
-        fillColor: '#00FF88',
-        color: '#fff',
-        weight: 2,
-        fillOpacity: 1,
-        zIndexOffset: 1000
+        radius: 10, fillColor: '#00FF88', color: '#fff',
+        weight: 2, fillOpacity: 1, zIndexOffset: 1000
       }).addTo(mapInstance.current)
 
       gridLayer.current.clearLayers()
@@ -131,47 +132,31 @@ export default function GameMap() {
         pathPolyline.current.setLatLngs(latLngs)
       }
     }
-  }, [position, path, isRecording])
+  }, [position, path, isRecording, t])
 
-  // Broadcast own location for radar
   useEffect(() => {
     if (!position || !userId) return
-
     const broadcastLocation = async () => {
       const { data: profile } = await supabase
-        .from('profiles')
-        .select('username, color')
-        .eq('id', userId)
-        .single()
-
-      await supabase
-        .from('player_locations')
-        .upsert({
-          user_id: userId,
-          lat: position.lat,
-          lng: position.lng,
-          username: profile?.username || 'Player',
-          color: profile?.color || '#FF5733',
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' })
+        .from('profiles').select('username, color').eq('id', userId).single()
+      await supabase.from('player_locations').upsert({
+        user_id: userId, lat: position.lat, lng: position.lng,
+        username: profile?.username || 'Player',
+        color: profile?.color || '#FF5733',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' })
     }
-
     broadcastLocation()
   }, [position, userId])
 
-  // Subscribe to other players' locations (real-time radar)
   useEffect(() => {
     if (!userId) return
-
     const channel = supabase
       .channel('player-locations')
       .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'player_locations'
+        event: '*', schema: 'public', table: 'player_locations'
       }, (payload) => {
         if (!mapInstance.current) return
-
         const p = payload.new || payload.old
         if (!p || p.user_id === userId) return
 
@@ -179,16 +164,12 @@ export default function GameMap() {
           radarMarkersRef.current[p.user_id].remove()
           delete radarMarkersRef.current[p.user_id]
         }
-
         if (payload.eventType === 'DELETE') return
 
         radarMarkersRef.current[p.user_id] = L.circleMarker(
           [p.lat, p.lng], {
-            radius: 8,
-            fillColor: p.color || '#FF5733',
-            color: '#fff',
-            weight: 2,
-            fillOpacity: 0.9
+            radius: 8, fillColor: p.color || '#FF5733',
+            color: '#fff', weight: 2, fillOpacity: 0.9
           }
         ).bindTooltip(p.username, { permanent: false })
          .addTo(mapInstance.current)
@@ -211,18 +192,10 @@ export default function GameMap() {
   async function loadScore() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
-    const { data } = await supabase
-      .from('profiles')
-      .select('total_score, last_score_updated_at')
-      .eq('id', user.id)
-      .single()
-
-    const { count } = await supabase
-      .from('territories')
-      .select('*', { count: 'exact', head: true })
-      .eq('controller_id', user.id)
-
+    const { data } = await supabase.from('profiles')
+      .select('total_score, last_score_updated_at').eq('id', user.id).single()
+    const { count } = await supabase.from('territories')
+      .select('*', { count: 'exact', head: true }).eq('controller_id', user.id)
     if (data) {
       const minutesHeld = (Date.now() - new Date(data.last_score_updated_at).getTime()) / 60000
       const liveScore = Math.floor((data.total_score || 0) + (minutesHeld * (count || 0)))
@@ -233,15 +206,10 @@ export default function GameMap() {
 
   async function loadTerritories() {
     const { data, error } = await supabase
-      .from('territories_view')
-      .select('grid_id, lat, lng, color')
-
+      .from('territories_view').select('grid_id, lat, lng, color')
     if (error) { console.error('Territory load error:', error); return }
     if (!data || data.length === 0) return
-
-    console.log(`Rendering ${data.length} territories`)
     territoriesLayer.current.clearLayers()
-
     const H = GRID_DEGREES / 2
     data.forEach(t => {
       if (!t.lat || !t.lng) return
@@ -254,29 +222,20 @@ export default function GameMap() {
   }
 
   async function handleClose() {
-    if (path.length < 4) {
-      setStatusMsg('⚠️ Walk a bigger loop first!')
-      return
-    }
+    if (path.length < 4) { setStatusMsg(t.loopTooSmall); return }
 
     const completedPath = [...path]
     stopRecording()
 
-    if (wakeLockRef.current) {
-      wakeLockRef.current.release()
-      wakeLockRef.current = null
-    }
+    if (wakeLockRef.current) { wakeLockRef.current.release(); wakeLockRef.current = null }
 
     const coordinates = completedPath.map(p => [p.lng, p.lat])
     coordinates.push(coordinates[0])
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setStatusMsg('⚠️ You must be logged in')
-      return
-    }
+    if (!user) { setStatusMsg(t.mustLogin); return }
 
-    setStatusMsg('Capturing territory...')
+    setStatusMsg(t.capturing)
 
     const { data, error } = await supabase.rpc('capture_blocks_in_polygon', {
       loop_coordinates: coordinates,
@@ -284,22 +243,18 @@ export default function GameMap() {
     })
 
     if (error) {
-      setStatusMsg('❌ Capture failed')
+      setStatusMsg(t.captureFailed)
       console.error(error)
       return
     }
 
     const captured = data?.length || 0
-    setStatusMsg(`✅ Captured ${captured} blocks!`)
+    setStatusMsg(`✅ ${captured} ${t.captured}`)
 
-    if (pathPolyline.current) {
-      pathPolyline.current.remove()
-      pathPolyline.current = null
-    }
+    if (pathPolyline.current) { pathPolyline.current.remove(); pathPolyline.current = null }
 
     await supabase.rpc('update_player_score', {
-      player_id: user.id,
-      blocks_captured: captured
+      player_id: user.id, blocks_captured: captured
     })
 
     resetPath()
@@ -310,75 +265,59 @@ export default function GameMap() {
   function handleCancel() {
     stopRecording()
     resetPath()
-    if (pathPolyline.current) {
-      pathPolyline.current.remove()
-      pathPolyline.current = null
-    }
-    if (wakeLockRef.current) {
-      wakeLockRef.current.release()
-      wakeLockRef.current = null
-    }
-    setStatusMsg('Cancelled. Tap START to try again.')
+    if (pathPolyline.current) { pathPolyline.current.remove(); pathPolyline.current = null }
+    if (wakeLockRef.current) { wakeLockRef.current.release(); wakeLockRef.current = null }
+    setStatusMsg(t.cancelled)
   }
 
   async function handleLogout() {
-    if (userId) {
-      await supabase.from('player_locations').delete().eq('user_id', userId)
-    }
+    if (userId) await supabase.from('player_locations').delete().eq('user_id', userId)
     await supabase.auth.signOut()
   }
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100vw' }}>
-
-      <div ref={mapRef} style={{
-        height: '100vh', width: '100vw',
-        position: 'absolute', top: 0, left: 0
-      }} />
+      <div ref={mapRef} style={{ height: '100vh', width: '100vw', position: 'absolute', top: 0, left: 0 }} />
 
       {error && (
         <div style={{
           position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
           background: '#FF4444', color: '#fff', padding: '8px 16px',
-          borderRadius: 8, zIndex: 1000, fontSize: 13,
-          maxWidth: '90vw', textAlign: 'center'
+          borderRadius: 8, zIndex: 1000, fontSize: 13, maxWidth: '90vw', textAlign: 'center'
         }}>
-          ⚠️ {error}
+          ⚠️ {t.gpsLow}. {t.usePhone}
         </div>
       )}
 
       <div style={{
-        position: 'absolute', top: error ? 56 : 16, left: '50%',
-        transform: 'translateX(-50%)',
+        position: 'absolute', top: error ? 56 : 16, left: '50%', transform: 'translateX(-50%)',
         background: 'rgba(0,0,0,0.75)', color: '#fff',
-        padding: '8px 20px', borderRadius: 20,
-        zIndex: 1000, fontSize: 14, whiteSpace: 'nowrap'
+        padding: '8px 20px', borderRadius: 20, zIndex: 1000, fontSize: 14, whiteSpace: 'nowrap'
       }}>
         {statusMsg}
       </div>
 
+      {/* Score panel */}
       <div style={{
         position: 'absolute', top: 16, left: 16,
         background: 'rgba(0,0,0,0.75)', color: '#fff',
-        padding: '10px 16px', borderRadius: 12,
-        zIndex: 1000, fontSize: 13, lineHeight: 1.6
+        padding: '10px 16px', borderRadius: 12, zIndex: 1000, fontSize: 13, lineHeight: 1.6
       }}>
         <div style={{ color: '#00FF88', fontWeight: 'bold', fontSize: 16 }}>
-          {score.toLocaleString()} pts
+          {score.toLocaleString()} {t.points}
         </div>
         <div style={{ color: '#aaa' }}>
-          {blockCount} blocks owned
+          {blockCount} {t.blocksOwned}
         </div>
       </div>
 
+      {/* Center button */}
       <button onClick={centerOnPlayer} style={{
         position: 'absolute', top: 16, right: 16,
         background: 'rgba(0,0,0,0.75)', color: '#fff',
         border: 'none', borderRadius: 8, padding: '10px 14px',
         fontSize: 20, cursor: 'pointer', zIndex: 1000
-      }}>
-        🎯
-      </button>
+      }}>🎯</button>
 
       {/* Profile button */}
       <button onClick={() => setShowProfile(true)} style={{
@@ -386,9 +325,7 @@ export default function GameMap() {
         background: 'rgba(0,0,0,0.75)', color: '#fff',
         border: 'none', borderRadius: 8, padding: '10px 14px',
         fontSize: 20, cursor: 'pointer', zIndex: 1000
-      }}>
-        👤
-      </button>
+      }}>👤</button>
 
       {/* Leaderboard button */}
       <button onClick={() => setShowLeaderboard(true)} style={{
@@ -396,9 +333,7 @@ export default function GameMap() {
         background: 'rgba(0,0,0,0.75)', color: '#FFD700',
         border: 'none', borderRadius: 8, padding: '10px 14px',
         fontSize: 20, cursor: 'pointer', zIndex: 1000
-      }}>
-        🏆
-      </button>
+      }}>🏆</button>
 
       {/* Logout button */}
       <button onClick={handleLogout} style={{
@@ -406,44 +341,49 @@ export default function GameMap() {
         background: 'rgba(0,0,0,0.75)', color: '#aaa',
         border: 'none', borderRadius: 8, padding: '8px 12px',
         fontSize: 12, cursor: 'pointer', zIndex: 1000
-      }}>
-        Logout
-      </button>
+      }}>{t.logout}</button>
 
+      {/* Language switcher */}
       <div style={{
-        position: 'absolute', bottom: 40, left: '50%',
-        transform: 'translateX(-50%)',
+        position: 'absolute', bottom: 110, right: 16,
+        display: 'flex', flexDirection: 'column', gap: 6, zIndex: 1000
+      }}>
+        {LANGUAGES.map(l => (
+          <button key={l.code} onClick={() => setLang(l.code)} style={{
+            background: lang === l.code ? '#00FF88' : 'rgba(0,0,0,0.75)',
+            color: lang === l.code ? '#000' : '#fff',
+            border: 'none', borderRadius: 8,
+            padding: '6px 10px', cursor: 'pointer',
+            fontSize: 12, fontWeight: 'bold'
+          }}>
+            {l.flag} {l.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Control buttons */}
+      <div style={{
+        position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
         display: 'flex', gap: 12, zIndex: 1000
       }}>
         {!isRecording ? (
-          <button
-            onClick={async () => {
-              startRecording(position)
-              setStatusMsg('🔴 Recording started!')
-              wakeLockRef.current = await requestWakeLock()
-            }}
-            style={btn('#00FF88', '#000')}>
-            ▶ START
+          <button onClick={async () => {
+            startRecording(position)
+            setStatusMsg(t.recordingStarted)
+            wakeLockRef.current = await requestWakeLock()
+          }} style={btn('#00FF88', '#000')}>
+            {t.start}
           </button>
         ) : (
           <>
-            <button onClick={handleClose} style={btn('#FFD700', '#000')}>
-              ⬡ CLOSE LOOP
-            </button>
-            <button onClick={handleCancel} style={btn('#FF4444', '#fff')}>
-              ✕ CANCEL
-            </button>
+            <button onClick={handleClose} style={btn('#FFD700', '#000')}>{t.closeLoop}</button>
+            <button onClick={handleCancel} style={btn('#FF4444', '#fff')}>{t.cancel}</button>
           </>
         )}
       </div>
 
-      {showLeaderboard && (
-        <Leaderboard onClose={() => setShowLeaderboard(false)} />
-      )}
-
-      {showProfile && userId && (
-        <Profile userId={userId} onClose={() => setShowProfile(false)} />
-      )}
+      {showLeaderboard && <Leaderboard onClose={() => setShowLeaderboard(false)} />}
+      {showProfile && userId && <Profile userId={userId} onClose={() => setShowProfile(false)} />}
     </div>
   )
 }

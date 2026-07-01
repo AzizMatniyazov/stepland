@@ -2,8 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import { LanguageProvider } from './lib/LanguageContext'
 
-// Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
@@ -12,7 +12,6 @@ if ('serviceWorker' in navigator) {
   })
 }
 
-// Wake Lock API — keeps screen on during runs
 export async function requestWakeLock() {
   if ('wakeLock' in navigator) {
     try {
@@ -29,6 +28,8 @@ export async function requestWakeLock() {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <LanguageProvider>
+      <App />
+    </LanguageProvider>
   </StrictMode>,
 )
