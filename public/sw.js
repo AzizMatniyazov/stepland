@@ -1,27 +1,43 @@
-const CACHE_NAME = 'stepland-v1'
-const STATIC_ASSETS = ['/', '/index.html']
+const CACHE_NAME = 'stepland-v4'
 
+// On install - skip waiting immediately
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
-  )
   self.skipWaiting()
 })
 
+// On activate - delete ALL old caches immediately
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-      )
-    )
+      Promise.all(keys.map(key => caches.delete(key)))
+    ).then(() => self.clients.claim())
   )
-  self.clients.claim()
 })
 
+// Network first for EVERYTHING
+// Only fall back to cache if completely offline
 self.addEventListener('fetch', event => {
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') return
+
+  // Skip Supabase API calls entirely - never cache these
   if (event.request.url.includes('supabase.co')) return
+
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
+    fetch(event.request)
+      .then(response => {
+        // Got a fresh response - cache it for offline use
+        if (response.ok) {
+          const responseClone = response.clone()
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseClone)
+          })
+        }
+        return response
+      })
+      .catch(() => {
+        // Network failed - try cache as fallback
+        return caches.match(event.request)
+      })
   )
 })
