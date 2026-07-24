@@ -49,6 +49,7 @@ export default function GameMap() {
   const [statusMsg, setStatusMsg] = useState('')
   const [score, setScore] = useState(0)
   const [blockCount, setBlockCount] = useState(0)
+  const [allPlayers, setAllPlayers] = useState([])
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [userId, setUserId] = useState(null)
@@ -90,6 +91,7 @@ export default function GameMap() {
 
     loadTerritories()
     loadScore()
+    loadAllPlayers()
   }, [])
 
   useEffect(() => {
@@ -189,6 +191,15 @@ export default function GameMap() {
     }
   }
 
+  async function loadAllPlayers() {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, username, color, total_score')
+      .order('total_score', { ascending: false })
+      .limit(10)
+    if (data) setAllPlayers(data)
+  }
+
   async function loadScore() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -212,7 +223,6 @@ export default function GameMap() {
     if (error) { console.error('Territory load error:', error); return }
     if (!data || data.length === 0) return
 
-    console.log(`Rendering ${data.length} territories`)
     territoriesLayer.current.clearLayers()
 
     const H = GRID_DEGREES / 2
@@ -292,6 +302,7 @@ export default function GameMap() {
     resetPath()
     loadTerritories()
     loadScore()
+    loadAllPlayers()
   }
 
   function handleCancel() {
@@ -329,17 +340,51 @@ export default function GameMap() {
         {statusMsg}
       </div>
 
+      {/* Live scores panel — top left */}
       <div style={{
         position: 'absolute', top: 16, left: 16,
-        background: 'rgba(0,0,0,0.75)', color: '#fff',
-        padding: '10px 16px', borderRadius: 12, zIndex: 1000, fontSize: 13, lineHeight: 1.6
+        background: 'rgba(0,0,0,0.82)', color: '#fff',
+        padding: '10px 14px', borderRadius: 14,
+        zIndex: 1000, fontSize: 12, lineHeight: 1.8,
+        maxWidth: 180
       }}>
-        <div style={{ color: '#00FF88', fontWeight: 'bold', fontSize: 16 }}>
+        <div style={{ color: '#00FF88', fontWeight: 'bold', fontSize: 15, marginBottom: 2 }}>
           {score.toLocaleString()} {t.points}
         </div>
-        <div style={{ color: '#aaa' }}>
+        <div style={{ color: '#aaa', fontSize: 11, marginBottom: 8 }}>
           {blockCount} {t.blocksOwned}
         </div>
+
+        {allPlayers.length > 0 && (
+          <div style={{ borderTop: '1px solid #333', paddingTop: 8 }}>
+            <div style={{ color: '#666', fontSize: 10, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>
+              🏆 Top Players
+            </div>
+            {allPlayers.map((player) => (
+              <div key={player.id} style={{
+                display: 'flex', alignItems: 'center',
+                gap: 6, marginBottom: 4
+              }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: player.color || '#FF5733', flexShrink: 0
+                }} />
+                <div style={{
+                  flex: 1, overflow: 'hidden',
+                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  color: player.id === userId ? '#00FF88' : '#fff',
+                  fontSize: 12,
+                  fontWeight: player.id === userId ? 'bold' : 'normal'
+                }}>
+                  {player.username}
+                </div>
+                <div style={{ color: '#aaa', fontSize: 11, flexShrink: 0 }}>
+                  {Math.floor(player.total_score || 0).toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <button onClick={centerOnPlayer} style={{
