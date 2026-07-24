@@ -206,18 +206,50 @@ export default function GameMap() {
 
   async function loadTerritories() {
     const { data, error } = await supabase
-      .from('territories_view').select('grid_id, lat, lng, color')
+      .from('territories_view')
+      .select('grid_id, lat, lng, color, controller_id')
+
     if (error) { console.error('Territory load error:', error); return }
     if (!data || data.length === 0) return
+
+    console.log(`Rendering ${data.length} territories`)
     territoriesLayer.current.clearLayers()
+
     const H = GRID_DEGREES / 2
     data.forEach(t => {
       if (!t.lat || !t.lng) return
       const color = t.color || '#FF5733'
-      L.rectangle(
+
+      const rect = L.rectangle(
         [[t.lat - H, t.lng - H], [t.lat + H, t.lng + H]],
         { color, fillColor: color, fillOpacity: 0.5, weight: 1 }
-      ).addTo(territoriesLayer.current)
+      )
+
+      rect.on('click', async () => {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username, total_score')
+          .eq('id', t.controller_id)
+          .single()
+
+        if (profile) {
+          rect.bindPopup(`
+            <div style="text-align:center; padding:4px">
+              <div style="font-weight:bold; font-size:15px; color:${color}">
+                ■ ${profile.username}
+              </div>
+              <div style="color:#aaa; font-size:12px; margin-top:4px">
+                ${Math.floor(profile.total_score || 0).toLocaleString()} pts
+              </div>
+              <div style="color:#888; font-size:11px; margin-top:2px">
+                +1 pt/min
+              </div>
+            </div>
+          `).openPopup()
+        }
+      })
+
+      rect.addTo(territoriesLayer.current)
     })
   }
 
@@ -297,7 +329,6 @@ export default function GameMap() {
         {statusMsg}
       </div>
 
-      {/* Score panel */}
       <div style={{
         position: 'absolute', top: 16, left: 16,
         background: 'rgba(0,0,0,0.75)', color: '#fff',
@@ -311,7 +342,6 @@ export default function GameMap() {
         </div>
       </div>
 
-      {/* Center button */}
       <button onClick={centerOnPlayer} style={{
         position: 'absolute', top: 16, right: 16,
         background: 'rgba(0,0,0,0.75)', color: '#fff',
@@ -319,7 +349,6 @@ export default function GameMap() {
         fontSize: 20, cursor: 'pointer', zIndex: 1000
       }}>🎯</button>
 
-      {/* Profile button */}
       <button onClick={() => setShowProfile(true)} style={{
         position: 'absolute', top: 70, right: 16,
         background: 'rgba(0,0,0,0.75)', color: '#fff',
@@ -327,7 +356,6 @@ export default function GameMap() {
         fontSize: 20, cursor: 'pointer', zIndex: 1000
       }}>👤</button>
 
-      {/* Leaderboard button */}
       <button onClick={() => setShowLeaderboard(true)} style={{
         position: 'absolute', top: 124, right: 16,
         background: 'rgba(0,0,0,0.75)', color: '#FFD700',
@@ -335,7 +363,6 @@ export default function GameMap() {
         fontSize: 20, cursor: 'pointer', zIndex: 1000
       }}>🏆</button>
 
-      {/* Logout button */}
       <button onClick={handleLogout} style={{
         position: 'absolute', top: 178, right: 16,
         background: 'rgba(0,0,0,0.75)', color: '#aaa',
@@ -343,7 +370,6 @@ export default function GameMap() {
         fontSize: 12, cursor: 'pointer', zIndex: 1000
       }}>{t.logout}</button>
 
-      {/* Language switcher */}
       <div style={{
         position: 'absolute', bottom: 110, right: 16,
         display: 'flex', flexDirection: 'column', gap: 6, zIndex: 1000
@@ -361,7 +387,6 @@ export default function GameMap() {
         ))}
       </div>
 
-      {/* Control buttons */}
       <div style={{
         position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
         display: 'flex', gap: 12, zIndex: 1000

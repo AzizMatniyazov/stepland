@@ -37,3 +37,20 @@ html, body {
 .leaflet-layer {
   opacity: 1 !important;
 }
+
+/* Territory popup styling */
+.leaflet-popup-content-wrapper {
+  background: #1a1a1a !important;
+  color: #fff !important;
+  border-radius: 12px !important;
+  border: 1px solid #333 !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+
+.leaflet-popup-tip {
+  background: #1a1a1a !important;
+}
+
+.leaflet-popup-close-button {
+  color: #888 !important;
+}
