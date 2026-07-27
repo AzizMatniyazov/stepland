@@ -112,10 +112,36 @@ export default function GameMap() {
       : t.gpsLocked)
 
     if (!playerMarker.current) {
-      playerMarker.current = L.circleMarker([position.lat, position.lng], {
-        radius: 10, fillColor: '#00FF88', color: '#fff',
-        weight: 2, fillOpacity: 1, zIndexOffset: 1000
-      }).addTo(mapInstance.current)
+      const selfIcon = L.divIcon({
+        className: '',
+        html: `
+          <div style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+          ">
+            <div style="font-size: 24px; animation: walk 0.4s infinite alternate;">🚶</div>
+            <div style="
+              background: #00FF88;
+              color: #000;
+              font-size: 10px;
+              font-weight: bold;
+              padding: 2px 6px;
+              border-radius: 10px;
+              white-space: nowrap;
+              margin-top: 2px;
+              box-shadow: 0 2px 6px rgba(0,255,136,0.4);
+            ">You</div>
+          </div>
+        `,
+        iconSize: [40, 50],
+        iconAnchor: [20, 45]
+      })
+
+      playerMarker.current = L.marker(
+        [position.lat, position.lng],
+        { icon: selfIcon, zIndexOffset: 1000 }
+      ).addTo(mapInstance.current)
 
       gridLayer.current.clearLayers()
       const lines = drawGrid(mapInstance.current)
@@ -168,13 +194,39 @@ export default function GameMap() {
         }
         if (payload.eventType === 'DELETE') return
 
-        radarMarkersRef.current[p.user_id] = L.circleMarker(
-          [p.lat, p.lng], {
-            radius: 8, fillColor: p.color || '#FF5733',
-            color: '#fff', weight: 2, fillOpacity: 0.9
-          }
-        ).bindTooltip(p.username, { permanent: false })
-         .addTo(mapInstance.current)
+        const playerIcon = L.divIcon({
+          className: '',
+          html: `
+            <div style="
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              animation: bounce 0.6s infinite alternate;
+            ">
+              <div style="
+                font-size: 22px;
+                animation: walk 0.4s infinite alternate;
+              ">🚶</div>
+              <div style="
+                background: ${p.color || '#FF5733'};
+                color: #fff;
+                font-size: 10px;
+                font-weight: bold;
+                padding: 2px 6px;
+                border-radius: 10px;
+                white-space: nowrap;
+                margin-top: 2px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+              ">${p.username}</div>
+            </div>
+          `,
+          iconSize: [40, 50],
+          iconAnchor: [20, 45]
+        })
+
+        radarMarkersRef.current[p.user_id] = L.marker(
+          [p.lat, p.lng], { icon: playerIcon }
+        ).addTo(mapInstance.current)
       })
       .subscribe()
 

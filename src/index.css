@@ -54,3 +54,14 @@ html, body {
 .leaflet-popup-close-button {
   color: #888 !important;
 }
+
+/* Player walking animations */
+@keyframes walk {
+  0% { transform: rotate(-8deg) translateY(0px); }
+  100% { transform: rotate(8deg) translateY(-3px); }
+}
+
+@keyframes bounce {
+  0% { transform: translateY(0px); }
+  100% { transform: translateY(-4px); }
+}
