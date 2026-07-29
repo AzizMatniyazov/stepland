@@ -49,10 +49,8 @@ export default function GameMap() {
   const [statusMsg, setStatusMsg] = useState('')
   const [score, setScore] = useState(0)
   const [blockCount, setBlockCount] = useState(0)
-  const [allPlayers, setAllPlayers] = useState([])
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
-  const [showScores, setShowScores] = useState(false)
   const [userId, setUserId] = useState(null)
 
   useEffect(() => {
@@ -92,7 +90,6 @@ export default function GameMap() {
 
     loadTerritories()
     loadScore()
-    loadAllPlayers()
   }, [])
 
   useEffect(() => {
@@ -104,6 +101,14 @@ export default function GameMap() {
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [isRecording])
+
+  // Auto refresh score every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadScore()
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (!position || !mapInstance.current) return
@@ -212,15 +217,6 @@ export default function GameMap() {
     }
   }
 
-  async function loadAllPlayers() {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, username, color, total_score')
-      .order('total_score', { ascending: false })
-      .limit(10)
-    if (data) setAllPlayers(data)
-  }
-
   async function loadScore() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -311,13 +307,13 @@ export default function GameMap() {
     if (pathPolyline.current) { pathPolyline.current.remove(); pathPolyline.current = null }
 
     await supabase.rpc('update_player_score', {
-      player_id: user.id, blocks_captured: captured
+      player_id: user.id,
+      blocks_captured: captured
     })
 
     resetPath()
     loadTerritories()
     loadScore()
-    loadAllPlayers()
   }
 
   function handleCancel() {
@@ -355,61 +351,19 @@ export default function GameMap() {
         {statusMsg}
       </div>
 
-      {/* Score button — top left, compact */}
-      <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 1000 }}>
-        <button
-          onClick={() => setShowScores(!showScores)}
-          style={{
-            background: 'rgba(0,0,0,0.82)', color: '#00FF88',
-            border: 'none', borderRadius: 12, padding: '8px 14px',
-            fontSize: 13, fontWeight: 'bold', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 8
-          }}
-        >
-          <span>{score.toLocaleString()} {t.points}</span>
-          <span style={{ color: '#aaa', fontSize: 11 }}>{blockCount} 📦</span>
-          <span style={{ fontSize: 10, color: '#666' }}>{showScores ? '▲' : '▼'}</span>
-        </button>
-
-        {/* Dropdown scores panel */}
-        {showScores && (
-          <div style={{
-            marginTop: 6,
-            background: 'rgba(0,0,0,0.92)',
-            borderRadius: 12, padding: '10px 14px',
-            minWidth: 200, border: '1px solid #333'
-          }}>
-            <div style={{ color: '#666', fontSize: 10, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-              🏆 Top Players
-            </div>
-            {allPlayers.map((player, i) => (
-              <div key={player.id} style={{
-                display: 'flex', alignItems: 'center',
-                gap: 8, marginBottom: 6
-              }}>
-                <div style={{ color: '#666', fontSize: 11, width: 16 }}>
-                  {i + 1}
-                </div>
-                <div style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: player.color || '#FF5733', flexShrink: 0
-                }} />
-                <div style={{
-                  flex: 1, overflow: 'hidden',
-                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  color: player.id === userId ? '#00FF88' : '#fff',
-                  fontSize: 13,
-                  fontWeight: player.id === userId ? 'bold' : 'normal'
-                }}>
-                  {player.username}
-                </div>
-                <div style={{ color: '#FFD700', fontSize: 12, flexShrink: 0, fontWeight: 'bold' }}>
-                  {Math.floor(player.total_score || 0).toLocaleString()}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* My score — top left, small */}
+      <div style={{
+        position: 'absolute', top: 16, left: 16,
+        background: 'rgba(0,0,0,0.82)', color: '#fff',
+        padding: '8px 14px', borderRadius: 12,
+        zIndex: 1000, fontSize: 13, lineHeight: 1.6
+      }}>
+        <div style={{ color: '#00FF88', fontWeight: 'bold', fontSize: 15 }}>
+          {score.toLocaleString()} {t.points}
+        </div>
+        <div style={{ color: '#aaa', fontSize: 11 }}>
+          {blockCount} {t.blocksOwned}
+        </div>
       </div>
 
       <button onClick={centerOnPlayer} style={{
