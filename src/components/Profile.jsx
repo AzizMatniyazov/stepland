@@ -3,17 +3,9 @@ import { supabase } from '../lib/supabase'
 
 function colorDistance(hex1, hex2) {
   if (!hex1 || !hex2) return 100
-  const r1 = parseInt(hex1.slice(1, 3), 16)
-  const g1 = parseInt(hex1.slice(3, 5), 16)
-  const b1 = parseInt(hex1.slice(5, 7), 16)
-  const r2 = parseInt(hex2.slice(1, 3), 16)
-  const g2 = parseInt(hex2.slice(3, 5), 16)
-  const b2 = parseInt(hex2.slice(5, 7), 16)
-  return Math.sqrt(
-    Math.pow(r1 - r2, 2) * 0.3 +
-    Math.pow(g1 - g2, 2) * 0.59 +
-    Math.pow(b1 - b2, 2) * 0.11
-  )
+  const r1 = parseInt(hex1.slice(1,3),16), g1 = parseInt(hex1.slice(3,5),16), b1 = parseInt(hex1.slice(5,7),16)
+  const r2 = parseInt(hex2.slice(1,3),16), g2 = parseInt(hex2.slice(3,5),16), b2 = parseInt(hex2.slice(5,7),16)
+  return Math.sqrt(Math.pow(r1-r2,2)*0.3 + Math.pow(g1-g2,2)*0.59 + Math.pow(b1-b2,2)*0.11)
 }
 
 export default function Profile({ userId, onClose }) {
@@ -53,33 +45,27 @@ export default function Profile({ userId, onClose }) {
   }
 
   async function handleSave() {
-    setLoading(true)
-    setError('')
-    setSuccess('')
+    setLoading(true); setError(''); setSuccess('')
 
     if (!newUsername.trim() || newUsername.trim().length < 3) {
       setError('Username must be at least 3 characters')
-      setLoading(false)
-      return
+      setLoading(false); return
     }
 
     const { data: existing } = await supabase
       .from('profiles').select('id')
       .eq('username', newUsername.trim()).neq('id', userId).single()
 
-    if (existing) {
-      setError('Username already taken')
-      setLoading(false)
-      return
-    }
+    if (existing) { setError('Username already taken'); setLoading(false); return }
 
-    const { data: profiles } = await supabase.from('profiles').select('color').neq('id', userId)
+    const { data: profiles } = await supabase
+      .from('profiles').select('color').neq('id', userId)
+
     if (profiles) {
-      const tooSimilar = profiles.some(p => colorDistance(newColor, p.color) < 30)
+      const tooSimilar = profiles.some(p => colorDistance(newColor, p.color) < 15)
       if (tooSimilar) {
         setError('Color too similar to another player. Pick a different shade.')
-        setLoading(false)
-        return
+        setLoading(false); return
       }
     }
 
@@ -88,13 +74,8 @@ export default function Profile({ userId, onClose }) {
       .update({ username: newUsername.trim(), color: newColor })
       .eq('id', userId)
 
-    if (error) {
-      setError('Failed to save. Try again.')
-    } else {
-      setSuccess('Profile updated!')
-      setEditing(false)
-      loadProfile()
-    }
+    if (error) { setError('Failed to save. Try again.') }
+    else { setSuccess('Profile updated!'); setEditing(false); loadProfile() }
     setLoading(false)
   }
 

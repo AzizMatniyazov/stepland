@@ -35,7 +35,7 @@ export default function Onboarding({ userId, onComplete }) {
       .from('profiles').select('color').neq('id', userId)
 
     if (profiles) {
-      const tooSimilar = profiles.some(p => p.color && colorDistance(selectedColor, p.color) < 30)
+      const tooSimilar = profiles.some(p => p.color && colorDistance(selectedColor, p.color) < 15)
       if (tooSimilar) { setError(t.colorSimilar); setLoading(false); return }
     }
 
@@ -54,7 +54,6 @@ export default function Onboarding({ userId, onComplete }) {
       alignItems: 'center', justifyContent: 'center',
       background: '#0a0a0a', color: '#fff', padding: 24, gap: 20
     }}>
-      {/* Language switcher */}
       <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
         {LANGUAGES.map(l => (
           <button key={l.code} onClick={() => setLang(l.code)} style={{
