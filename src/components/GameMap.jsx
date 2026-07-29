@@ -52,6 +52,7 @@ export default function GameMap() {
   const [allPlayers, setAllPlayers] = useState([])
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [showScores, setShowScores] = useState(false)
   const [userId, setUserId] = useState(null)
 
   useEffect(() => {
@@ -115,23 +116,9 @@ export default function GameMap() {
       const selfIcon = L.divIcon({
         className: '',
         html: `
-          <div style="
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-          ">
-            <div style="font-size: 24px; animation: walk 0.4s infinite alternate;">🚶</div>
-            <div style="
-              background: #00FF88;
-              color: #000;
-              font-size: 10px;
-              font-weight: bold;
-              padding: 2px 6px;
-              border-radius: 10px;
-              white-space: nowrap;
-              margin-top: 2px;
-              box-shadow: 0 2px 6px rgba(0,255,136,0.4);
-            ">You</div>
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <div style="font-size:24px;animation:walk 0.4s infinite alternate;">🚶</div>
+            <div style="background:#00FF88;color:#000;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:10px;white-space:nowrap;margin-top:2px;box-shadow:0 2px 6px rgba(0,255,136,0.4);">You</div>
           </div>
         `,
         iconSize: [40, 50],
@@ -197,27 +184,9 @@ export default function GameMap() {
         const playerIcon = L.divIcon({
           className: '',
           html: `
-            <div style="
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              animation: bounce 0.6s infinite alternate;
-            ">
-              <div style="
-                font-size: 22px;
-                animation: walk 0.4s infinite alternate;
-              ">🚶</div>
-              <div style="
-                background: ${p.color || '#FF5733'};
-                color: #fff;
-                font-size: 10px;
-                font-weight: bold;
-                padding: 2px 6px;
-                border-radius: 10px;
-                white-space: nowrap;
-                margin-top: 2px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-              ">${p.username}</div>
+            <div style="display:flex;flex-direction:column;align-items:center;animation:bounce 0.6s infinite alternate;">
+              <div style="font-size:22px;animation:walk 0.4s infinite alternate;">🚶</div>
+              <div style="background:${p.color || '#FF5733'};color:#fff;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:10px;white-space:nowrap;margin-top:2px;box-shadow:0 2px 4px rgba(0,0,0,0.3);">${p.username}</div>
             </div>
           `,
           iconSize: [40, 50],
@@ -296,16 +265,10 @@ export default function GameMap() {
 
         if (profile) {
           rect.bindPopup(`
-            <div style="text-align:center; padding:4px">
-              <div style="font-weight:bold; font-size:15px; color:${color}">
-                ■ ${profile.username}
-              </div>
-              <div style="color:#aaa; font-size:12px; margin-top:4px">
-                ${Math.floor(profile.total_score || 0).toLocaleString()} pts
-              </div>
-              <div style="color:#888; font-size:11px; margin-top:2px">
-                +1 pt/min
-              </div>
+            <div style="text-align:center;padding:4px">
+              <div style="font-weight:bold;font-size:15px;color:${color}">■ ${profile.username}</div>
+              <div style="color:#aaa;font-size:12px;margin-top:4px">${Math.floor(profile.total_score || 0).toLocaleString()} pts</div>
+              <div style="color:#888;font-size:11px;margin-top:2px">+1 pt/min</div>
             </div>
           `).openPopup()
         }
@@ -392,31 +355,41 @@ export default function GameMap() {
         {statusMsg}
       </div>
 
-      {/* Live scores panel — top left */}
-      <div style={{
-        position: 'absolute', top: 16, left: 16,
-        background: 'rgba(0,0,0,0.82)', color: '#fff',
-        padding: '10px 14px', borderRadius: 14,
-        zIndex: 1000, fontSize: 12, lineHeight: 1.8,
-        maxWidth: 180
-      }}>
-        <div style={{ color: '#00FF88', fontWeight: 'bold', fontSize: 15, marginBottom: 2 }}>
-          {score.toLocaleString()} {t.points}
-        </div>
-        <div style={{ color: '#aaa', fontSize: 11, marginBottom: 8 }}>
-          {blockCount} {t.blocksOwned}
-        </div>
+      {/* Score button — top left, compact */}
+      <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 1000 }}>
+        <button
+          onClick={() => setShowScores(!showScores)}
+          style={{
+            background: 'rgba(0,0,0,0.82)', color: '#00FF88',
+            border: 'none', borderRadius: 12, padding: '8px 14px',
+            fontSize: 13, fontWeight: 'bold', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 8
+          }}
+        >
+          <span>{score.toLocaleString()} {t.points}</span>
+          <span style={{ color: '#aaa', fontSize: 11 }}>{blockCount} 📦</span>
+          <span style={{ fontSize: 10, color: '#666' }}>{showScores ? '▲' : '▼'}</span>
+        </button>
 
-        {allPlayers.length > 0 && (
-          <div style={{ borderTop: '1px solid #333', paddingTop: 8 }}>
-            <div style={{ color: '#666', fontSize: 10, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>
+        {/* Dropdown scores panel */}
+        {showScores && (
+          <div style={{
+            marginTop: 6,
+            background: 'rgba(0,0,0,0.92)',
+            borderRadius: 12, padding: '10px 14px',
+            minWidth: 200, border: '1px solid #333'
+          }}>
+            <div style={{ color: '#666', fontSize: 10, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
               🏆 Top Players
             </div>
-            {allPlayers.map((player) => (
+            {allPlayers.map((player, i) => (
               <div key={player.id} style={{
                 display: 'flex', alignItems: 'center',
-                gap: 6, marginBottom: 4
+                gap: 8, marginBottom: 6
               }}>
+                <div style={{ color: '#666', fontSize: 11, width: 16 }}>
+                  {i + 1}
+                </div>
                 <div style={{
                   width: 8, height: 8, borderRadius: '50%',
                   background: player.color || '#FF5733', flexShrink: 0
@@ -425,12 +398,12 @@ export default function GameMap() {
                   flex: 1, overflow: 'hidden',
                   textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   color: player.id === userId ? '#00FF88' : '#fff',
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: player.id === userId ? 'bold' : 'normal'
                 }}>
                   {player.username}
                 </div>
-                <div style={{ color: '#aaa', fontSize: 11, flexShrink: 0 }}>
+                <div style={{ color: '#FFD700', fontSize: 12, flexShrink: 0, fontWeight: 'bold' }}>
                   {Math.floor(player.total_score || 0).toLocaleString()}
                 </div>
               </div>
