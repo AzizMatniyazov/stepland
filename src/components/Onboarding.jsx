@@ -10,6 +10,22 @@ function colorDistance(hex1, hex2) {
   return Math.sqrt(Math.pow(r1-r2,2)*0.3 + Math.pow(g1-g2,2)*0.59 + Math.pow(b1-b2,2)*0.11)
 }
 
+const BAD_WORDS = [
+  'fuck', 'shit', 'bitch', 'dick', 'pussy', 'cock', 'cunt', 'nigger', 'nigga',
+  'faggot', 'fag', 'whore', 'slut', 'bastard', 'piss', 'crap', 'asshole',
+  'хуй', 'пизда', 'блядь', 'ебать', 'сука', 'пиздец', 'залупа', 'мудак',
+  'ублюдок', 'шлюха', 'еблан', 'пиздюк', 'хуйня', 'бля', 'блять', 'пидор', 'пидар',
+  'qotgan', 'orospu', 'harom', 'ahmoq', 'tentak', 'sikdir', 'sik', 'amak',
+  'gay', 'lesbian', 'trans', 'queer', 'lgbt', 'lgbtq', 'homo', 'bisex',
+  'гей', 'лесби', 'транс', 'гомик', 'педик',
+  'gey', 'gomosek', 'lesbiyan'
+]
+
+function containsBadWord(text) {
+  const lower = text.toLowerCase()
+  return BAD_WORDS.some(word => lower.includes(word))
+}
+
 export default function Onboarding({ userId, onComplete }) {
   const { lang, setLang, t } = useLanguage()
   const [username, setUsername] = useState('')
@@ -21,6 +37,12 @@ export default function Onboarding({ userId, onComplete }) {
     if (!username.trim() || username.trim().length < 3) {
       setError(t.usernameShort); return
     }
+
+    if (containsBadWord(username.trim())) {
+      setError('This username is not allowed. Please choose a different one.')
+      return
+    }
+
     if (!selectedColor) { setError(t.chooseColor); return }
 
     setLoading(true); setError('')
